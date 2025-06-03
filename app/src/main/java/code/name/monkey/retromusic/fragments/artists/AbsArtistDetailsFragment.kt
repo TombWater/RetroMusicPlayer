@@ -21,10 +21,11 @@ import androidx.recyclerview.widget.DefaultItemAnimator
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.LinearLayoutManager
 import code.name.monkey.retromusic.EXTRA_ALBUM_ID
-import code.name.monkey.retromusic.model.AlbumDetailListItem
 import code.name.monkey.retromusic.R
 import code.name.monkey.retromusic.adapter.album.HorizontalAlbumAdapter
-import code.name.monkey.retromusic.adapter.song.SimpleSongAdapter
+import code.name.monkey.retromusic.adapter.artistdetail.ArtistSongAdapter
+import code.name.monkey.retromusic.model.AlbumDetailListItem
+import code.name.monkey.retromusic.model.Song
 import code.name.monkey.retromusic.databinding.FragmentArtistDetailsBinding
 import code.name.monkey.retromusic.dialogs.AddToPlaylistDialog
 import code.name.monkey.retromusic.extensions.*
@@ -59,7 +60,7 @@ abstract class AbsArtistDetailsFragment : AbsMainActivityFragment(R.layout.fragm
     abstract val artistId: Long?
     abstract val artistName: String?
     private lateinit var artist: Artist
-    private lateinit var songAdapter: SimpleSongAdapter
+    private lateinit var songAdapter: ArtistSongAdapter
     private lateinit var albumAdapter: HorizontalAlbumAdapter
     private var forceDownload: Boolean = false
     private var lang: String? = null
@@ -122,7 +123,7 @@ abstract class AbsArtistDetailsFragment : AbsMainActivityFragment(R.layout.fragm
             layoutManager = GridLayoutManager(this.context, 1, GridLayoutManager.HORIZONTAL, false)
             adapter = albumAdapter
         }
-        songAdapter = SimpleSongAdapter(requireActivity(), ArrayList(), R.layout.item_song)
+        songAdapter = ArtistSongAdapter(requireActivity(), ArrayList())
         binding.fragmentArtistContent.recyclerView.apply {
             itemAnimator = DefaultItemAnimator()
             layoutManager = LinearLayoutManager(this.context)
@@ -155,9 +156,9 @@ abstract class AbsArtistDetailsFragment : AbsMainActivityFragment(R.layout.fragm
         binding.fragmentArtistContent.songTitle.text = songText
         binding.fragmentArtistContent.albumTitle.text = albumText
         if (PreferenceUtil.artistDetailSongSortOrder == SortOrder.ArtistSongSortOrder.SONG_ALBUM) {
-            songAdapter.swapDataSet(artist.songsGroupedByAlbum) // This will be List<AlbumDetailListItem>
+            songAdapter.swapDataSet(artist.songsGroupedByAlbum)
         } else {
-            songAdapter.swapDataSet(artist.sortedSongs.map { AlbumDetailListItem.SongItem(it) }) // Wrap other sorts
+            songAdapter.swapDataSet(artist.sortedSongs.map { AlbumDetailListItem.SongItem(it) })
         }
         albumAdapter.swapDataSet(artist.albums)
     }
@@ -313,7 +314,6 @@ abstract class AbsArtistDetailsFragment : AbsMainActivityFragment(R.layout.fragm
         if (sortOrder == SortOrder.ArtistSongSortOrder.SONG_ALBUM) {
             songAdapter.swapDataSet(artist.songsGroupedByAlbum)
         } else {
-            // artist.sortedSongs will use the new sortOrder from PreferenceUtil
             songAdapter.swapDataSet(artist.sortedSongs.map { AlbumDetailListItem.SongItem(it) })
         }
     }
