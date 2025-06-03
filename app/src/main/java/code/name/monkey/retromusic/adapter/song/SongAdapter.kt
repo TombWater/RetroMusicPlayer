@@ -37,7 +37,9 @@ import code.name.monkey.retromusic.helper.MusicPlayerRemote
 import code.name.monkey.retromusic.helper.SortOrder
 import code.name.monkey.retromusic.helper.menu.SongMenuHelper
 import code.name.monkey.retromusic.helper.menu.SongsMenuHelper
+import code.name.monkey.retromusic.model.AlbumDetailListItem
 import code.name.monkey.retromusic.model.Song
+import code.name.monkey.retromusic.model.Album
 import code.name.monkey.retromusic.util.MusicUtil
 import code.name.monkey.retromusic.util.PreferenceUtil
 import code.name.monkey.retromusic.util.RetroUtil
@@ -51,7 +53,7 @@ import me.zhanghai.android.fastscroll.PopupTextProvider
 
 open class SongAdapter(
     override val activity: FragmentActivity,
-    var dataSet: MutableList<Song>,
+    var dataSet: MutableList<AlbumDetailListItem>,
     protected var itemLayoutRes: Int,
     showSectionName: Boolean = true
 ) : AbsMultiSelectAdapter<SongAdapter.ViewHolder, Song>(
@@ -66,22 +68,38 @@ open class SongAdapter(
         this.setHasStableIds(true)
     }
 
-    open fun swapDataSet(dataSet: List<Song>) {
+    open fun swapDataSet(dataSet: List<AlbumDetailListItem>) {
         this.dataSet = ArrayList(dataSet)
         notifyDataSetChanged()
     }
 
     override fun getItemId(position: Int): Long {
-        return dataSet[position].id
+        // Return a stable ID, for songs it's song.id, for headers, maybe album.id
+        // For now, let's use hashcode for headers, ensure it's stable if album data doesn't change
+        // Or use a negative value of album id to distinguish from song ids if they can overlap
+        return when (val item = dataSet[position]) {
+            is AlbumDetailListItem.SongItem -> item.song.id
+            is AlbumDetailListItem.AlbumHeaderItem -> item.album.id * -1 // Or some other stable id logic
+        }
+    }
+
+    override fun getItemViewType(position: Int): Int {
+        return when (dataSet[position]) {
+            is AlbumDetailListItem.AlbumHeaderItem -> VIEW_TYPE_ALBUM_HEADER
+            is AlbumDetailListItem.SongItem -> VIEW_TYPE_SONG
+        }
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
-        val view =
+        val view = if (viewType == VIEW_TYPE_ALBUM_HEADER) {
+            LayoutInflater.from(activity).inflate(R.layout.item_album_header_for_song_list, parent, false)
+        } else { // VIEW_TYPE_SONG
             try {
                 LayoutInflater.from(activity).inflate(itemLayoutRes, parent, false)
             } catch (e: Resources.NotFoundException) {
                 LayoutInflater.from(activity).inflate(R.layout.item_list, parent, false)
             }
+        }
         return createViewHolder(view)
     }
 
@@ -90,17 +108,46 @@ open class SongAdapter(
     }
 
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
-        val song = dataSet[position]
-        val isChecked = isChecked(song)
-        holder.itemView.isActivated = isChecked
-        holder.menu?.isGone = isChecked
-        holder.title?.text = getSongTitle(song)
-        holder.text?.text = getSongText(song)
-        holder.text2?.text = getSongText(song)
-        loadAlbumCover(song, holder)
-        val landscape = RetroUtil.isLandscape
-        if ((PreferenceUtil.songGridSize > 2 && !landscape) || (PreferenceUtil.songGridSizeLand > 5 && landscape)) {
-            holder.menu?.isVisible = false
+        when (val item = dataSet[position]) {
+            is AlbumDetailListItem.AlbumHeaderItem -> {
+                holder.title?.text = item.album.title // Example: Album Title (Year)
+                holder.text?.text = activity.getString(R.string.album_year_and_total_duration, item.album.year.toString(), MusicUtil.getReadableDurationString(item.album.totalDuration))
+                holder.menu?.isVisible = false
+                holder.itemView.isActivated = false
+                holder.time?.isVisible = false
+                holder.imageText?.isVisible = false
+                holder.image?.let { imageView ->
+                    Glide.with(activity)
+                        .asBitmapPalette()
+                        .songCoverOptions(item.album.safeGetFirstSong()) // Use a song for consistent cover options
+                        .load(RetroGlideExtension.getAlbumModel(item.album)) // Load album art
+                        .into(object : RetroMusicColoredTarget(imageView) {
+                            override fun onColorReady(colors: MediaNotificationProcessor) {
+                                // Optional: holder.paletteColorContainer?.setBackgroundColor(colors.backgroundColor)
+                            }
+                        })
+                }
+            }
+            is AlbumDetailListItem.SongItem -> {
+                val song = item.song
+                val isChecked = isChecked(song)
+                holder.itemView.isActivated = isChecked
+                holder.menu?.isGone = isChecked
+                holder.menu?.isVisible = !isChecked // Ensure menu is visible if not checked for songs
+                holder.title?.text = getSongTitle(song) // getSongTitle should take Song
+                holder.text?.text = getSongText(song)   // getSongText should take Song
+                loadAlbumCover(song, holder) // loadAlbumCover should take Song
+
+                holder.time?.isVisible = true
+                holder.imageText?.isVisible = true
+                holder.time?.text = MusicUtil.getReadableDurationString(song.duration)
+                val fixedTrackNumber = MusicUtil.getFixedTrackNumber(song.trackNumber)
+                holder.imageText?.text = if (fixedTrackNumber > 0) fixedTrackNumber.toString() else "-"
+                val landscape = RetroUtil.isLandscape
+                if ((PreferenceUtil.songGridSize > 2 && !landscape) || (PreferenceUtil.songGridSizeLand > 5 && landscape)) {
+                    holder.menu?.isVisible = false
+                }
+            }
         }
     }
 
@@ -146,7 +193,7 @@ open class SongAdapter(
     }
 
     override fun getIdentifier(position: Int): Song? {
-        return dataSet[position]
+        return (dataSet.getOrNull(position) as? AlbumDetailListItem.SongItem)?.song
     }
 
     override fun getName(model: Song): String {
@@ -158,52 +205,52 @@ open class SongAdapter(
     }
 
     override fun getPopupText(position: Int): String {
-        val sectionName: String? = when (PreferenceUtil.songSortOrder) {
-            SortOrder.SongSortOrder.SONG_DEFAULT -> return MusicUtil.getSectionName(
-                dataSet[position].title,
-                true
-            )
-
-            SortOrder.SongSortOrder.SONG_A_Z, SortOrder.SongSortOrder.SONG_Z_A -> dataSet[position].title
-            SortOrder.SongSortOrder.SONG_ALBUM -> dataSet[position].albumName
-            SortOrder.SongSortOrder.SONG_ARTIST -> dataSet[position].artistName
-            SortOrder.SongSortOrder.SONG_YEAR -> return MusicUtil.getYearString(dataSet[position].year)
-            SortOrder.SongSortOrder.COMPOSER -> dataSet[position].composer
-            SortOrder.SongSortOrder.SONG_ALBUM_ARTIST -> dataSet[position].albumArtist
-            else -> {
-                return ""
+        return when (val item = dataSet[position]) {
+            is AlbumDetailListItem.AlbumHeaderItem -> MusicUtil.getSectionName(item.album.title)
+            is AlbumDetailListItem.SongItem -> {
+                val song = item.song
+                when (PreferenceUtil.songSortOrder) { // Assuming songSortOrder is still relevant for individual song popups
+                    SortOrder.SongSortOrder.SONG_DEFAULT -> MusicUtil.getSectionName(song.title, true)
+                    SortOrder.SongSortOrder.SONG_A_Z, SortOrder.SongSortOrder.SONG_Z_A -> song.title
+                    SortOrder.SongSortOrder.SONG_ALBUM -> song.albumName
+                    SortOrder.SongSortOrder.SONG_ARTIST -> song.artistName
+                    SortOrder.SongSortOrder.SONG_YEAR -> MusicUtil.getYearString(song.year)
+                    SortOrder.SongSortOrder.COMPOSER -> song.composer ?: ""
+                    SortOrder.SongSortOrder.SONG_ALBUM_ARTIST -> song.albumArtist ?: ""
+                    else -> ""
+                }
             }
         }
-        return MusicUtil.getSectionName(sectionName)
     }
 
     open inner class ViewHolder(itemView: View) : MediaEntryViewHolder(itemView) {
         protected open var songMenuRes = SongMenuHelper.MENU_RES
-        protected open val song: Song
-            get() = dataSet[layoutPosition]
+        protected open val song: Song?
+            get() = (dataSet.getOrNull(layoutPosition) as? AlbumDetailListItem.SongItem)?.song
 
         init {
             menu?.setOnClickListener(object : SongMenuHelper.OnClickSongMenu(activity) {
-                override val song: Song
+                override val song: Song?
                     get() = this@ViewHolder.song
 
                 override val menuRes: Int
                     get() = songMenuRes
 
                 override fun onMenuItemClick(item: MenuItem): Boolean {
+                    if (song == null) return false
                     return onSongMenuItemClick(item) || super.onMenuItemClick(item)
                 }
             })
         }
 
         protected open fun onSongMenuItemClick(item: MenuItem): Boolean {
-            if (image != null && image!!.isVisible) {
+            if (image != null && image!!.isVisible && song != null) {
                 when (item.itemId) {
                     R.id.action_go_to_album -> {
                         activity.findNavController(R.id.fragment_container)
                             .navigate(
                                 R.id.albumDetailsFragment,
-                                bundleOf(EXTRA_ALBUM_ID to song.albumId)
+                                bundleOf(EXTRA_ALBUM_ID to song!!.albumId)
                             )
                         return true
                     }
@@ -213,20 +260,39 @@ open class SongAdapter(
         }
 
         override fun onClick(v: View?) {
-            if (isInQuickSelectMode) {
-                toggleChecked(layoutPosition)
-            } else {
-                MusicPlayerRemote.openQueueKeepShuffleMode(dataSet, layoutPosition, true)
+            val item = dataSet.getOrNull(layoutPosition) ?: return
+            if (item is AlbumDetailListItem.SongItem) {
+                if (isInQuickSelectMode) {
+                    toggleChecked(layoutPosition)
+                } else {
+                    val songsOnly = dataSet.filterIsInstance<AlbumDetailListItem.SongItem>().map { it.song }
+                    val currentSong = item.song
+                    val playQueuePosition = songsOnly.indexOf(currentSong)
+                    if (playQueuePosition != -1) {
+                         MusicPlayerRemote.openQueueKeepShuffleMode(songsOnly, playQueuePosition, true)
+                    }
+                }
+            } else if (item is AlbumDetailListItem.AlbumHeaderItem) {
+                val album = item.album
+                activity.findNavController(R.id.fragment_container)
+                   .navigate(
+                       R.id.albumDetailsFragment,
+                       bundleOf(EXTRA_ALBUM_ID to album.id)
+                   )
             }
         }
 
         override fun onLongClick(v: View?): Boolean {
-            println("Long click")
-            return toggleChecked(layoutPosition)
+            if (dataSet.getOrNull(layoutPosition) is AlbumDetailListItem.SongItem) {
+                 return toggleChecked(layoutPosition)
+            }
+            return false
         }
     }
 
     companion object {
+        const val VIEW_TYPE_ALBUM_HEADER = 0
+        const val VIEW_TYPE_SONG = 1
         val TAG: String = SongAdapter::class.java.simpleName
     }
 }

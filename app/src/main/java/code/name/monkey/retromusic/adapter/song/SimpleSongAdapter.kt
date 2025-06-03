@@ -17,16 +17,17 @@ package code.name.monkey.retromusic.adapter.song
 import android.view.LayoutInflater
 import android.view.ViewGroup
 import androidx.fragment.app.FragmentActivity
+import code.name.monkey.retromusic.model.AlbumDetailListItem
 import code.name.monkey.retromusic.model.Song
 import code.name.monkey.retromusic.util.MusicUtil
 
 class SimpleSongAdapter(
     context: FragmentActivity,
-    songs: ArrayList<Song>,
+    items: List<AlbumDetailListItem>,
     layoutRes: Int
-) : SongAdapter(context, songs, layoutRes) {
+) : SongAdapter(context, items.toMutableList(), layoutRes) {
 
-    override fun swapDataSet(dataSet: List<Song>) {
+    override fun swapDataSet(dataSet: List<AlbumDetailListItem>) {
         this.dataSet = dataSet.toMutableList()
         notifyDataSetChanged()
     }
@@ -37,10 +38,10 @@ class SimpleSongAdapter(
 
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
         super.onBindViewHolder(holder, position)
-        val fixedTrackNumber = MusicUtil.getFixedTrackNumber(dataSet[position].trackNumber)
-
-        holder.imageText?.text = if (fixedTrackNumber > 0) fixedTrackNumber.toString() else "-"
-        holder.time?.text = MusicUtil.getReadableDurationString(dataSet[position].duration)
+        // Specific SimpleSongAdapter logic for imageText and time has been
+        // incorporated into SongAdapter's onBindViewHolder for SongItem.
+        // If any distinct behavior for SimpleSongAdapter's items is needed, add here,
+        // ensuring it only applies if dataSet[position] is SongItem.
     }
 
     override fun getItemCount(): Int {

@@ -20,6 +20,7 @@ import androidx.annotation.LayoutRes
 import androidx.recyclerview.widget.GridLayoutManager
 import code.name.monkey.retromusic.R
 import code.name.monkey.retromusic.adapter.song.SongAdapter
+import code.name.monkey.retromusic.model.AlbumDetailListItem
 import code.name.monkey.retromusic.extensions.setUpMediaRouteButton
 import code.name.monkey.retromusic.fragments.GridStyle
 import code.name.monkey.retromusic.fragments.ReloadType
@@ -33,7 +34,7 @@ class SongsFragment : AbsRecyclerViewCustomGridSizeFragment<SongAdapter, GridLay
         super.onViewCreated(view, savedInstanceState)
         libraryViewModel.getSongs().observe(viewLifecycleOwner) {
             if (it.isNotEmpty())
-                adapter?.swapDataSet(it)
+                adapter?.swapDataSet(it.map { song -> AlbumDetailListItem.SongItem(song) })
             else
                 adapter?.swapDataSet(listOf())
         }
@@ -57,10 +58,10 @@ class SongsFragment : AbsRecyclerViewCustomGridSizeFragment<SongAdapter, GridLay
     }
 
     override fun createAdapter(): SongAdapter {
-        val dataSet = if (adapter == null) mutableListOf() else adapter!!.dataSet
+        val currentDataSet = if (adapter == null) mutableListOf<AlbumDetailListItem>() else adapter!!.dataSet
         return SongAdapter(
             requireActivity(),
-            dataSet,
+            currentDataSet, // This is now MutableList<AlbumDetailListItem>
             itemLayoutRes()
         )
     }

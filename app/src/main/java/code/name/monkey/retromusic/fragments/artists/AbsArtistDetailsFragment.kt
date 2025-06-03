@@ -21,6 +21,7 @@ import androidx.recyclerview.widget.DefaultItemAnimator
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.LinearLayoutManager
 import code.name.monkey.retromusic.EXTRA_ALBUM_ID
+import code.name.monkey.retromusic.model.AlbumDetailListItem
 import code.name.monkey.retromusic.R
 import code.name.monkey.retromusic.adapter.album.HorizontalAlbumAdapter
 import code.name.monkey.retromusic.adapter.song.SimpleSongAdapter
@@ -153,7 +154,11 @@ abstract class AbsArtistDetailsFragment : AbsMainActivityFragment(R.layout.fragm
         )
         binding.fragmentArtistContent.songTitle.text = songText
         binding.fragmentArtistContent.albumTitle.text = albumText
-        songAdapter.swapDataSet(artist.sortedSongs)
+        if (PreferenceUtil.artistDetailSongSortOrder == SortOrder.ArtistSongSortOrder.SONG_ALBUM) {
+            songAdapter.swapDataSet(artist.songsGroupedByAlbum) // This will be List<AlbumDetailListItem>
+        } else {
+            songAdapter.swapDataSet(artist.sortedSongs.map { AlbumDetailListItem.SongItem(it) }) // Wrap other sorts
+        }
         albumAdapter.swapDataSet(artist.albums)
     }
 
@@ -305,7 +310,12 @@ abstract class AbsArtistDetailsFragment : AbsMainActivityFragment(R.layout.fragm
 
     private fun setSaveSortOrder(sortOrder: String) {
         PreferenceUtil.artistDetailSongSortOrder = sortOrder
-        songAdapter.swapDataSet(artist.sortedSongs)
+        if (sortOrder == SortOrder.ArtistSongSortOrder.SONG_ALBUM) {
+            songAdapter.swapDataSet(artist.songsGroupedByAlbum)
+        } else {
+            // artist.sortedSongs will use the new sortOrder from PreferenceUtil
+            songAdapter.swapDataSet(artist.sortedSongs.map { AlbumDetailListItem.SongItem(it) })
+        }
     }
 
     private fun setupAlbumSortButton() {

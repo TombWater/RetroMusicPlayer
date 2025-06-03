@@ -19,6 +19,9 @@ data class Album(
     val songs: List<Song>
 ) {
 
+    val totalDuration: Long
+        get() = songs.sumOf { it.duration }
+
     val title: String
         get() = safeGetFirstSong().albumName
 

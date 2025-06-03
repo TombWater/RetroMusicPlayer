@@ -14,6 +14,7 @@
 
 package code.name.monkey.retromusic.model
 
+import code.name.monkey.retromusic.model.AlbumDetailListItem
 import code.name.monkey.retromusic.helper.SortOrder
 import code.name.monkey.retromusic.util.MusicUtil
 import code.name.monkey.retromusic.util.PreferenceUtil
@@ -95,6 +96,21 @@ data class Artist(
                         throw IllegalArgumentException("invalid ${PreferenceUtil.artistDetailSongSortOrder}")
                     }
                 })
+        }
+
+    val songsGroupedByAlbum: List<AlbumDetailListItem>
+        get() {
+            val result = mutableListOf<AlbumDetailListItem>()
+            // Sort albums by title (case-insensitive) for consistent ordering of album groups
+            val sortedArtistAlbums = this.albums.sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.title })
+            for (album in sortedArtistAlbums) {
+                result.add(AlbumDetailListItem.AlbumHeaderItem(album))
+                val songsInAlbumSortedByTrack = album.songs.sortedBy { it.trackNumber }
+                for (song in songsInAlbumSortedByTrack) {
+                    result.add(AlbumDetailListItem.SongItem(song))
+                }
+            }
+            return result
         }
 
     val sortedAlbums: List<Album>

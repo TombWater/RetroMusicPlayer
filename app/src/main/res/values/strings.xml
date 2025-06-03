@@ -63,6 +63,7 @@
         <item quantity="one">Song</item>
         <item quantity="other">Songs</item>
     </plurals>
+    <string name="album_year_and_total_duration">%1$s • %2$s</string>
     <string name="album_artist">Album Artist</string>
     <string name="albums">Albums</string>
     <plurals name="albums">
