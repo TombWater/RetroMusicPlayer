@@ -119,8 +119,8 @@ open class SongAdapter(
                 holder.image?.let { imageView ->
                     Glide.with(activity)
                         .asBitmapPalette()
-                        .songCoverOptions(item.album.safeGetFirstSong()) // Use a song for consistent cover options
-                        .load(RetroGlideExtension.getAlbumModel(item.album)) // Load album art
+                        .songCoverOptions(item.album.safeGetFirstSong()) // Using first song for styling consistency
+                        .load(MusicUtil.getMediaStoreAlbumCoverUri(item.album.id)) // Correct way to load album art
                         .into(object : RetroMusicColoredTarget(imageView) {
                             override fun onColorReady(colors: MediaNotificationProcessor) {
                                 // Optional: holder.paletteColorContainer?.setBackgroundColor(colors.backgroundColor)
@@ -129,23 +129,46 @@ open class SongAdapter(
                 }
             }
             is AlbumDetailListItem.SongItem -> {
-                val song = item.song
-                val isChecked = isChecked(song)
+                val songFromItem = item.song // item.song is non-nullable Song here
+                val isChecked = isChecked(songFromItem)
                 holder.itemView.isActivated = isChecked
-                holder.menu?.isGone = isChecked
+                // holder.menu?.isGone = isChecked // This line might be redundant if isVisible is set correctly
                 holder.menu?.isVisible = !isChecked // Ensure menu is visible if not checked for songs
-                holder.title?.text = getSongTitle(song) // getSongTitle should take Song
-                holder.text?.text = getSongText(song)   // getSongText should take Song
-                loadAlbumCover(song, holder) // loadAlbumCover should take Song
+                holder.title?.text = getSongTitle(songFromItem)
+                holder.text?.text = getSongText(songFromItem)
+                loadAlbumCover(songFromItem, holder)
 
                 holder.time?.isVisible = true
                 holder.imageText?.isVisible = true
-                holder.time?.text = MusicUtil.getReadableDurationString(song.duration)
-                val fixedTrackNumber = MusicUtil.getFixedTrackNumber(song.trackNumber)
+                holder.time?.text = MusicUtil.getReadableDurationString(songFromItem.duration)
+                val fixedTrackNumber = MusicUtil.getFixedTrackNumber(songFromItem.trackNumber)
                 holder.imageText?.text = if (fixedTrackNumber > 0) fixedTrackNumber.toString() else "-"
+
+                if (holder.menu?.isVisible == true) { // Only set listener if menu is visible
+                    holder.menu?.setOnClickListener(object : SongMenuHelper.OnClickSongMenu(activity) {
+                        override val song: Song // This is now correctly a non-nullable Song
+                            get() = songFromItem
+
+                        override val menuRes: Int
+                            get() = SongMenuHelper.MENU_RES
+
+                        override fun onMenuItemClick(menuItem: MenuItem): Boolean {
+                            // Pass songFromItem to the ViewHolder's method
+                            return holder.onSongMenuItemClick(menuItem, songFromItem) || super.onMenuItemClick(menuItem)
+                        }
+                    })
+                } else {
+                    holder.menu?.setOnClickListener(null) // Important to clear if not visible or checked
+                }
+
                 val landscape = RetroUtil.isLandscape
                 if ((PreferenceUtil.songGridSize > 2 && !landscape) || (PreferenceUtil.songGridSizeLand > 5 && landscape)) {
-                    holder.menu?.isVisible = false
+                    // If menu was set to visible based on !isChecked, this might override it.
+                    // Consider if this grid-based visibility should also be !isChecked dependent.
+                    if (holder.menu?.isVisible == true) { // only hide if it was visible
+                         holder.menu?.isVisible = false
+                         holder.menu?.setOnClickListener(null) // also clear listener
+                    }
                 }
             }
         }
@@ -224,33 +247,25 @@ open class SongAdapter(
     }
 
     open inner class ViewHolder(itemView: View) : MediaEntryViewHolder(itemView) {
-        protected open var songMenuRes = SongMenuHelper.MENU_RES
-        protected open val song: Song?
+        // protected open var songMenuRes = SongMenuHelper.MENU_RES // Removed as it's directly used or passed
+        protected open val currentSong: Song? // Renamed to avoid confusion with the 'song' in OnClickSongMenu
             get() = (dataSet.getOrNull(layoutPosition) as? AlbumDetailListItem.SongItem)?.song
 
         init {
-            menu?.setOnClickListener(object : SongMenuHelper.OnClickSongMenu(activity) {
-                override val song: Song?
-                    get() = this@ViewHolder.song
-
-                override val menuRes: Int
-                    get() = songMenuRes
-
-                override fun onMenuItemClick(item: MenuItem): Boolean {
-                    if (song == null) return false
-                    return onSongMenuItemClick(item) || super.onMenuItemClick(item)
-                }
-            })
+            // Menu click listener is now set in onBindViewHolder
+            // itemView.setOnClickListener(this) // Already handled by MediaEntryViewHolder
+            // itemView.setOnLongClickListener(this) // Already handled by MediaEntryViewHolder
         }
 
-        protected open fun onSongMenuItemClick(item: MenuItem): Boolean {
-            if (image != null && image!!.isVisible && song != null) {
+        // Modified to accept Song parameter
+        open fun onSongMenuItemClick(item: MenuItem, song: Song): Boolean {
+            if (image != null && image!!.isVisible) { // song parameter is non-null here
                 when (item.itemId) {
                     R.id.action_go_to_album -> {
                         activity.findNavController(R.id.fragment_container)
                             .navigate(
                                 R.id.albumDetailsFragment,
-                                bundleOf(EXTRA_ALBUM_ID to song!!.albumId)
+                                bundleOf(EXTRA_ALBUM_ID to song.albumId)
                             )
                         return true
                     }
