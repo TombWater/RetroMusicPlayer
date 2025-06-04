@@ -101,12 +101,35 @@ data class Artist(
     val songsGroupedByAlbum: List<AlbumDetailListItem>
         get() {
             val result = mutableListOf<AlbumDetailListItem>()
-            // Sort albums by title (case-insensitive) for consistent ordering of album groups
-            val sortedArtistAlbums = this.albums.sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.title })
-            for (album in sortedArtistAlbums) {
-                result.add(AlbumDetailListItem.AlbumHeaderItem(album))
-                val songsInAlbumSortedByTrack = album.songs.sortedBy { it.trackNumber }
-                for (song in songsInAlbumSortedByTrack) {
+            if (this.songs.isEmpty()) return result
+
+            val songsByAlbumId = this.songs.groupBy { it.albumId }
+
+            val albumInfos = songsByAlbumId.map { entry ->
+                val firstSong = entry.value.first()
+                object {
+                    val id = firstSong.albumId
+                    val name = firstSong.albumName
+                    val year = firstSong.year
+                    val songsInThisAlbum = entry.value.sortedBy { it.trackNumber }
+                    // totalDuration is not strictly needed on this anonymous object,
+                    // as the Album class will calculate it from songsInThisAlbum.
+                }
+            }
+
+            val sortedAlbumInfos = albumInfos.sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.name })
+
+            for (albumInfo in sortedAlbumInfos) {
+                // Create an Album object for the header. Its totalDuration will be calculated internally.
+                val headerAlbum = Album(
+                    id = albumInfo.id,
+                    songs = albumInfo.songsInThisAlbum
+                )
+                // The Album class's title, year, etc., are derived from its 'songs' list,
+                // so headerAlbum.title and headerAlbum.year will use albumInfo.songsInThisAlbum.
+
+                result.add(AlbumDetailListItem.AlbumHeaderItem(headerAlbum))
+                for (song in albumInfo.songsInThisAlbum) {
                     result.add(AlbumDetailListItem.SongItem(song))
                 }
             }
